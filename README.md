@@ -39,5 +39,76 @@ def add_poisson_gauss_noise(I, bl,a,b):
     return I_add_noise
     
     
+def addNoise(I,bl,K,B):
+
+    i8 = I*255.0
+    
+    sigma2 = K*(i8 - bl) + B
+    
+    mu = np.zeros_like(I)
+    std = np.sqrt(sigma2)
+    noise = np.random.normal(mu, std)
+    
+    I_addn = i8 + noise
+    
+    noise_map = K*(I_addn - bl) + B
+    
+    I_addn = I_addn/255.0
+    overExp_region = np.array(I > 0.98)
+    I_addn = I * overExp_region + (1.0-overExp_region)*I_addn
+    
+    
+    #noise_map = noise_map/255.0/255.0  #match the image data range 0~1
+    return I_addn
+    
+    
+    
+    
+bl = 1.0/16.0
+iso = 6400
+
+K,B,a,b = noise_model(iso)
+print("noise model : ",K,B,a,b)
+
+for luma in range (0,20,1):
+    I = np.zeros((256,256))
+    I = I + luma/255.0 + bl
+    I_noise = add_poisson_gauss_noise(I, bl,a,b)
+    
+    I_noise_old = addNoise(I,bl,K,B)
+    
+    tmp = np.clip(I*255,0,255)
+    out_file_pth = "./tmp/I_%d.bmp"%(luma)
+    cv2.imwrite(out_file_pth, tmp)
+    
+    tmp = np.clip(I_noise*255,0,255)
+    out_file_pth = "./tmp/I_%d_noise.bmp"%(luma)
+    cv2.imwrite(out_file_pth, tmp)
+    
+    
+    I_noise_vst = vst(I_noise, bl,a,b)
+    I_noise_vst_old = vst(I_noise_old, bl,a,b)
+    
+    noise_var = np.var(I_noise_vst)
+    noise_var_old = np.var(I_noise_vst_old)
+    
+    print("luma,noise_var = ",luma,noise_var,noise_var_old,noise_var/noise_var_old)
+
+    
+    
+    
+    
+
+def vst(I, bl,a,b):
+    g = bl
+    z_a = (I-g)/a
+    z_b = b/(a**2)
+    I_vst = 2*np.sqrt(np.maximum((I-g)/a+3.0/8.0+z_b,0))
+    
+    
+    return I_vst
+    
+    
+    
     
     
