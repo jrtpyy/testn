@@ -92,3 +92,55 @@ def ssim(img1, img2, window_size = 11, size_average = True):
     window = window.type_as(img1)
     
     return _ssim(img1, img2, window, window_size, channel, size_average)
+
+
+#################
+def get_mask(self,x,y):
+        with torch.no_grad():
+            b,c,h,w = x.size()
+            mask = np.zeros((b,1*w*h))
+            diff = torch.abs(x-y).sum(dim=1).view(b,-1)
+            diff_sort = [diff[i].sort(descending=True) for i in range (b)]
+            diff_np = diff.cpu().numpy()
+            hard_th_idx = int(self.p0*w*h)
+            for i in range(b):
+                hard_th = diff_sort[i][0][hard_th_idx].item()
+                mask[i] = diff_np[i] > hard_th
+                
+            rand_hart_th_idx = int(self.p1*w*h)
+            mask_rand = np.zeros((b,1*w*h))
+            for i in range(b):
+                mask_rand[i,0:rand_hart_th_idx] = 1
+                np.random.shuffle(mask_rand[i])
+                
+            mask = mask + mask_rand
+            mask = mask.reshape(b,-1,h,w)
+        return torch.from_numpy(mask).cuda()
+
+
+    def forward(self, x, y,weight):
+        mask = self.get_mask(x.detach(),y.detach())
+        loss = torch.mean(torch.abs(x-y)*mask*weight)
+        return loss
+        
+        
+####################
+def forward(ctx, input):
+        ctx.save_for_backward(input)
+        i = input.clone()
+        ge = torch.ge(input,0).float()
+        output = i + (ge.data - i.data)
+
+        return output
+
+
+    @staticmethod
+    def backward(ctx, grad_output): 
+        input, = ctx.saved_tensors
+        input_grad = grad_output.clone()
+        
+        ones = torch.ones_like(input)
+        zeros = torch.zeros_like(input)
+        output_grad = torch.maximum(zeros, torch.abs(ones - input) ) * input_grad
+
+        return output_grad
